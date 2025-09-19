@@ -7,21 +7,20 @@ To guide an AI assistant in creating a detailed, step-by-step task list in Markd
 ## Output
 
 - **Format:** Markdown (`.md`)
-- **Location:** `/tasks/`
+- **Location:** `/docs/tasks/`
 - **Filename:** `tasks-[prd-file-name].md` (e.g., `tasks-prd-user-profile-editing.md`)
 
 ## Process
 
 1.  **Receive PRD Reference:** The user points the AI to a specific PRD file
 2.  **Analyze PRD:** The AI reads and analyzes the functional requirements, user stories, and other sections of the specified PRD.
-3.  **Assess Current State:** Review the existing codebase to understand existing infrastructre, architectural patterns and conventions. Also, identify any existing components or features that already exist and could be relevant to the PRD requirements. Then, identify existing related files, components, and utilities that can be leveraged or need modification.
-4.  **Phase 1: Generate Parent Tasks:** Based on the PRD analysis and current state assessment, create the file and generate the main, high-level tasks required to implement the feature. Use your judgement on how many high-level tasks to use. It's likely to be about 
-5. **Inform the user:** Present these tasks to the user in the specified format (without sub-tasks yet) For example, say "I have generated the high-level tasks based on the PRD. Ready to generate the sub-tasks? Respond with 'Go' to proceed." . 
-6.  **Wait for Confirmation:** Pause and wait for the user to respond with "Go".
-7.  **Phase 2: Generate Sub-Tasks:** Once the user confirms, break down each parent task into smaller, actionable sub-tasks necessary to complete the parent task. Ensure sub-tasks logically follow from the parent task, cover the implementation details implied by the PRD, and consider existing codebase patterns where relevant without being constrained by them.
-8.  **Identify Relevant Files:** Based on the tasks and PRD, identify potential files that will need to be created or modified. List these under the `Relevant Files` section, including corresponding test files if applicable.
-9.  **Generate Final Output:** Combine the parent tasks, sub-tasks, relevant files, and notes into the final Markdown structure.
-10.  **Save Task List:** Save the generated document in the `/tasks/` directory with the filename `tasks-[prd-file-name].md`, where `[prd-file-name]` matches the base name of the input PRD file (e.g., if the input was `prd-user-profile-editing.md`, the output is `tasks-prd-user-profile-editing.md`).
+3.  **Assess Current State:** Review `@project-overview.mdc` (for domain concepts and technical patterns), `@development-workflow.md` (for testing and build processes), `@database-patterns.md` (for database creation templates), `README.md` (for setup), and `@confetti-db-bootstrapper` (for migration process), and the existing codebase to understand infrastructure, architectural patterns, domain concepts, and database conventions. Also, identify any existing components or features that already exist and could be relevant to the PRD requirements. Then, identify existing related files, components, and utilities that can be leveraged or need modification.
+4.  **Phase 1: Generate Parent Tasks:** Based on the PRD analysis and current state assessment, create the file and generate the main, high-level tasks required to implement the feature. Use your judgement on how many high-level tasks to use. It's likely to be about 5. Present these tasks to the user in the specified format (without sub-tasks yet). Inform the user: "I have generated the high-level tasks based on the PRD. Ready to generate the sub-tasks? Respond with 'Go' to proceed."
+5.  **Wait for Confirmation:** Pause and wait for the user to respond with "Go".
+6.  **Phase 2: Generate Sub-Tasks:** Once the user confirms, break down each parent task into smaller, actionable sub-tasks necessary to complete the parent task. Ensure sub-tasks logically follow from the parent task, cover the implementation details implied by the PRD, and consider existing codebase patterns where relevant without being constrained by them.
+7.  **Identify Relevant Files:** Based on the tasks and PRD, identify potential files that will need to be created or modified. List these under the `Relevant Files` section, including corresponding test files if applicable.
+8.  **Generate Final Output:** Combine the parent tasks, sub-tasks, relevant files, and notes into the final Markdown structure.
+9.  **Save Task List:** Save the generated document in the `/docs/tasks/` directory with the filename `tasks-[prd-file-name].md`, where `[prd-file-name]` matches the base name of the input PRD file (e.g., if the input was `prd-user-profile-editing.md`, the output is `tasks-prd-user-profile-editing.md`).
 
 ## Output Format
 
@@ -30,17 +29,70 @@ The generated task list _must_ follow this structure:
 ```markdown
 ## Relevant Files
 
-- `path/to/potential/file1.ts` - Brief description of why this file is relevant (e.g., Contains the main component for this feature).
-- `path/to/file1.test.ts` - Unit tests for `file1.ts`.
-- `path/to/another/file.tsx` - Brief description (e.g., API route handler for data submission).
-- `path/to/another/file.test.tsx` - Unit tests for `another/file.tsx`.
-- `lib/utils/helpers.ts` - Brief description (e.g., Utility functions needed for calculations).
-- `lib/utils/helpers.test.ts` - Unit tests for `helpers.ts`.
+- `apps/confetti-dash/src/client/pages/PartyElement.page.tsx` - Individual element detail page component (e.g., Main component for displaying element details).
+- `apps/confetti-dash/src/server/test/integration/party-element.test.ts` - Integration tests for party element API endpoints.
+- `apps/confetti-dash/src/routes.ts` - Route definitions (e.g., Adding partyElement route pattern).
+- `packages/confetti-db/src/tables/party_elements.table.ts` - Database schema for party elements (e.g., Adding DIY and cost fields).
+- `apps/confetti-db-bootstrapper/` - Database migration generator (run `pnpm build:migration` to generate migrate.sql).Always reference to modify the DB `apps/confetti-db-bootstrapper/README.md`
+- `apps/confetti-dash/src/shared/schema.ts` - API request/response schemas (e.g., Element detail response types).
 
 ### Notes
 
-- Unit tests should typically be placed alongside the code files they are testing (e.g., `MyComponent.tsx` and `MyComponent.test.tsx` in the same directory).
-- Use `npx jest [optional/path/to/test/file]` to run tests. Running without a path executes all tests found by the Jest configuration.
+- Integration tests are placed in `src/test/integration/` directories and named with `.test.ts` extension.
+- Use `npx vitest [optional/path/to/test/file]` to run tests. Running without a path executes all tests found by the Vitest configuration.
+- Database changes require updating table schemas and running `pnpm build:migration` to generate migrate.sql (never edit migrate.sql directly).
+
+## Confetti-Specific Technical Implementation Patterns
+
+When generating tasks for the confetti codebase, always apply these technical specifications:
+
+### Database Conventions (Reference: @database-patterns.md)
+
+- **CRITICAL**: Follow the exact 7-step database change process outlined in @database-patterns.md
+- **Entity Requirements**: All new database entities must include `created_on`, `modified_on`, and `deleted_on` fields
+- **Dual ID System**: Both internal numeric ID (`{entity}_id`) and external UUID (`{entity}_id`)
+- **Migration Strategy**: Use roll-forward, idempotent migrations generated by `pnpm build:migration` (never edit migrate.sql directly)
+- **Table Creation**: Use the complete table creation template from @database-patterns.md including Record schema, table interpolator, createTables(), createTriggers(), and createIndexes() functions
+- **Store Creation**: Follow the store pattern template with proper CRUD operations, error handling, and zod validation
+- **Store Registration**: Must update stores.ts with import, Stores object, SuperStore property, and constructor instantiation
+- **Junction Tables**: Pure junction tables use composite primary keys, no surrogate keys or timestamps
+- **Store Functions**: Must use destructured parameters, numbered SQL parameters (not named)
+- **SQL Style**: Only write SQL in lowercase
+- **Testing**: Write integration tests for all new store operations following the test template
+
+### Domain Concepts Integration
+
+- **Elements**: Visual/physical party components, stored in `elements` (templates) and `party_elements` (instances)
+- **Tasks**: Actionable planning steps, stored in `tasks` (templates) and `party_tasks` (instances)
+- **Events**: Temporal party blocks, stored in `events` (templates) and `party_events` (instances)
+- **Materials**: Supply items, linked via junction tables to elements and tasks
+- **Themes**: Pre-packaged collections providing curated starting points
+- **Parties**: Central entity representing specific event being planned
+- **AI Integration**: Consider `is_suggestion` and `suggestion_status` fields for AI-generated content
+
+### Mobile-First Implementation Requirements
+
+- **Layout**: Use existing `PartyLayout` component and responsive patterns
+- **Design**: Follow Pinterest-inspired grid layouts with large, tappable elements using Tailwind CSS
+- **Navigation**: Integrate with existing bottom navigation (`BottomNavigation.tsx`) and sidebar (`Sidebar.tsx`) patterns
+- **Responsive**: Mobile-first approach with `md:` breakpoints for desktop adaptations
+- **Interactions**: Tap-to-select, swipe gestures, haptic feedback on mobile
+
+### API and Backend Patterns
+
+- **Routing**: Follow existing patterns in `apps/confetti-dash/src/routes.ts`
+- **API Endpoints**: Use Hono patterns from `confetti-dash.worker.tsx`
+- **Schema Validation**: Use Zod schemas in `apps/confetti-dash/src/shared/schema.ts`
+- **Authentication**: Integrate with existing `getVarsAuthenticated()` patterns
+- **Queues**: Use Cloudflare Queues for async processing (AI, image generation)
+
+### Testing Strategy (Reference: @development-workflow.md)
+
+- **Integration Tests**: Place in `src/test/integration/` using Vitest
+- **Test Naming**: Use `.test.ts` extension (not `.test.tsx`)
+- **Test Execution**: `npx vitest [optional/path/to/test/file]` - run all tests with `npx vitest`
+- **Test Patterns**: Follow existing patterns in worker integration tests and database store test templates
+- **Database Testing**: Test against actual database schema changes using the test template from @database-patterns.md
 
 ## Tasks
 
@@ -58,4 +110,4 @@ The process explicitly requires a pause after generating parent tasks to get use
 
 ## Target Audience
 
-Assume the primary reader of the task list is a **junior developer** who will implement the feature with awareness of the existing codebase context.
+Assume the primary reader of the task list is a **junior developer** who will implement the feature with awareness of the existing codebase context. Tasks should reference the specific cursor rule files (`@database-patterns.md`, `@development-workflow.md`, etc.) and patterns to ensure consistency with established conventions.
