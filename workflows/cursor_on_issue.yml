@@ -1,0 +1,28 @@
+name: Run Cursor Agent on Issue
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write # For pushing branches
+  pull-requests: write # For creating PRs
+  issues: write # For commenting on issues
+
+jobs:
+  cursor-agent-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Cursor CLI
+        run: |
+          curl https://cursor.com/install -fsS | bash
+      - name: Add Cursor CLI to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Run Cursor Agent
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cursor-agent -p "You are operating in a GitHub Actions runner triggered by issue #${{ github.event.issue.number }}.
+          Please fix the issue described in GitHub issue #${{ github.event.issue.number }}. 
+          Make sure to include 'fixes #${{ github.event.issue.number }}' at the end of any commit message so that the PR will automatically close the issue when merged.

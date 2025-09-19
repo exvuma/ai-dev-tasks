@@ -1,0 +1,89 @@
+name: Ensure PR Description Contains Fixes Reference
+
+permissions:
+  pull-requests: write
+  contents: read
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited]
+
+jobs:
+  check-and-update-pr-description:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check commits for fixes reference and update PR description
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = pr.number;
+
+            // Regex to match "fixes #<number>" ignoring case
+            const fixesRegex = /fixes\s+#(\d+)/i;
+            // Regex to match "fixes-<number>" in branch names
+            const branchFixesRegex = /fixes-(\d+)/i;
+
+            // Get commits on the PR
+            const commits = await github.rest.pulls.listCommits({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+
+            let issueNumber = null;
+
+            // Search commit messages for fixes #
+            for (const commit of commits.data) {
+              const message = commit.commit.message;
+              const match = message.match(fixesRegex);
+              if (match) {
+                issueNumber = match[1];
+                break;
+              }
+            }
+
+            // If no issue number found, try PR title + body
+            console.log('PR title:', pr.title);
+            console.log('PR body:', pr.body);
+            if (!issueNumber) {
+              const titleMatch = pr.title.match(fixesRegex);
+              const bodyMatch = pr.body && pr.body.match(fixesRegex);
+              issueNumber = (titleMatch || bodyMatch) ? (titleMatch ? titleMatch[1] : bodyMatch[1]) : null;
+            }
+
+            // If still no issue number found, try branch name for fixes-<number> pattern
+            if (!issueNumber) {
+              console.log('PR head ref (branch name):', pr.head.ref);
+              const branchMatch = pr.head.ref.match(branchFixesRegex);
+              if (branchMatch) {
+                issueNumber = branchMatch[1];
+                console.log(`Found issue number ${issueNumber} in branch name`);
+              }
+            }
+
+            if (issueNumber) {
+              const fixesText = `fixes #${issueNumber}`;
+              const prBody = pr.body || "";
+
+              if (!prBody.toLowerCase().includes(fixesText.toLowerCase())) {
+                const updatedBody = prBody.trim() + `\n\n${fixesText}`;
+                await github.rest.pulls.update({
+                  owner,
+                  repo,
+                  pull_number: prNumber,
+                  body: updatedBody
+                });
+                console.log(`PR description updated to include "${fixesText}"`);
+              } else {
+                console.log(`PR description already includes "${fixesText}"`);
+              }
+            } else {
+              console.log("No fixes issue number found in commits or PR details, no update needed.");
+            }

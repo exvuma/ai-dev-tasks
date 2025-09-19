@@ -1,0 +1,125 @@
+name: Create Fixes Branch and PR from Cursor Comment
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: write # For pushing branches
+  pull-requests: write # For creating PRs
+  issues: write # For commenting on issues
+
+jobs:
+  create-fixes-branch-and-pr:
+    runs-on: ubuntu-latest
+    # Only run if the comment author is not a GitHub Action
+    if: github.event.comment.user.login == 'cursor[bot]'
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Extract variables
+        id: vars
+        run: |
+          # Store the comment body in a variable to avoid shell injection issues
+          # Use a here-document to safely handle multi-line content
+          read -r -d '' COMMENT_BODY << 'COMMENT_EOF' || true
+          ${{ github.event.comment.body }}
+          COMMENT_EOF
+          echo "Comment body length: ${#COMMENT_BODY} characters"
+
+          # Get the first line of the comment body
+          FIRST_LINE=$(echo "$COMMENT_BODY" | head -n 1)
+          echo "First line: $FIRST_LINE"
+
+          # Extract branch name from the comment body
+          # Look for cursor/ branch patterns in the entire comment, not just first line
+          # This handles both GitHub compare URLs and direct branch mentions
+          # Also look for branches that already have the fixes-<number> suffix
+          branch_name=$(echo "$COMMENT_BODY" | grep -oE 'cursor/[a-zA-Z0-9_-]+(?:-fixes-[0-9]+)?' | head -n 1)
+          echo "Extracted branch_name: '$branch_name'"
+
+          # If no branch found in the comment, check if this is a Cursor agent comment
+          # and try to extract from the issue title or look for a different pattern
+          if [ -z "$branch_name" ]; then
+            echo "No branch name found in comment. Checking if this is a Cursor agent comment..."
+            # Look for Cursor agent indicators
+            if echo "$COMMENT_BODY" | grep -q "cursor.com/background-agent\|cursor.com/agents"; then
+              echo "This appears to be a Cursor agent comment, but no branch name found."
+              echo "The workflow may need to be triggered by a different comment format."
+            fi
+          fi
+
+          echo "branch_name=$branch_name" >> $GITHUB_OUTPUT
+
+          issue_number=${{ github.event.issue.number }}
+          echo "issue_number=$issue_number" >> $GITHUB_OUTPUT
+
+          if [ -n "$branch_name" ]; then
+            # Check if branch already has fixes suffix
+            if echo "$branch_name" | grep -q "-fixes-[0-9]\+$"; then
+              echo "Branch already has fixes suffix: $branch_name"
+              new_branch="$branch_name"
+            else
+              new_branch="${branch_name}-fixes-${issue_number}"
+              echo "Added fixes suffix: $new_branch"
+            fi
+            echo "new_branch=$new_branch" >> $GITHUB_OUTPUT
+          else
+            echo "new_branch=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request from Existing Branch
+        if: ${{ steps.vars.outputs.branch_name != '' }}
+        id: create_pr
+        run: |
+          echo "Creating PR from existing branch: ${{ steps.vars.outputs.branch_name }}"
+
+          # Fetch all branches to ensure we have the latest refs
+          git fetch origin
+
+          # Check if the branch exists
+          if git show-ref --verify --quiet refs/remotes/origin/${{ steps.vars.outputs.branch_name }}; then
+            echo "Branch ${{ steps.vars.outputs.branch_name }} exists, proceeding with PR creation"
+            
+            # Create PR using GitHub CLI
+            PR_OUTPUT=$(gh pr create \
+              --title "Fixes for issue #${{ steps.vars.outputs.issue_number }} from Cursor agent" \
+              --body "This PR was automatically generated based on a comment from Cursor. It relates to issue #${{ steps.vars.outputs.issue_number }}." \
+              --base main \
+              --head ${{ steps.vars.outputs.branch_name }})
+            
+            # Extract just the URL from the output (last line)
+            PR_URL=$(echo "$PR_OUTPUT" | tail -n 1)
+            
+            echo "Created PR: $PR_URL"
+            echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          else
+            echo "Branch ${{ steps.vars.outputs.branch_name }} does not exist on origin"
+            echo "pr_url=" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment with PR link on issue
+        if: ${{ steps.vars.outputs.branch_name != '' && steps.create_pr.outputs.pr_url != '' }}
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue_number = context.payload.issue.number;
+            const pr_url = '${{ steps.create_pr.outputs.pr_url }}';
+            const branch_name = '${{ steps.vars.outputs.branch_name }}';
+
+            console.log('=== DEBUGGING PR COMMENT ===');
+            console.log('Issue number:', issue_number);
+            console.log('PR URL from step output:', pr_url);
+            console.log('Branch name:', branch_name);
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue_number,
+              body: `A new pull request has been created to address this issue: ${pr_url} on branch ${branch_name}`
+            });
