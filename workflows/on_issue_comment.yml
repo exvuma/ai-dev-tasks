@@ -85,7 +85,7 @@ jobs:
             # Create PR using GitHub CLI
             PR_OUTPUT=$(gh pr create \
               --title "Fixes for issue #${{ steps.vars.outputs.issue_number }} from Cursor agent" \
-              --body "This PR was automatically generated based on a comment from Cursor. It relates to issue #${{ steps.vars.outputs.issue_number }}." \
+              --body "This PR was automatically generated based on a comment from Cursor. It fixes #${{ steps.vars.outputs.issue_number }}." \
               --base main \
               --head ${{ steps.vars.outputs.branch_name }})
             
